@@ -93,6 +93,10 @@
 </head>
 <body>
 
+    <audio id="bgm-player" loop>
+        <source src="bgm.mp3" type="audio/mpeg">
+    </audio>
+
     <div id="content-box">
         <div id="text-area" class="question-text"></div>
         <div id="button-area" class="button-box"></div>
@@ -120,7 +124,6 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // 수정된 Q3를 포함한 최종 20개의 질문
         const questions = [
             { type: "intro", text: "질문에 신중히 답하세요." },
             { text: "Q1. 당신의 삶은 행복합니까?", options: ["예", "아니오"] },
@@ -147,12 +150,18 @@
 
         let currentIndex = 0; 
         let userAnswers = ""; 
+        let isMusicPlaying = false; // 음악 재생 상태 확인용
+        
         const footerNote = "\n\n저는 상담가가 아닙니다. 그저 질문을 던지는 사람일 뿐입니다.\n당신과 같은 길을 걷고, 같은 아픔을 나눈 사람들이 여기 있다는 사실이\n당신에게 작은 위로가 되기를 바랍니다.";
 
         const contentBox = document.getElementById('content-box');
         const textArea = document.getElementById('text-area');
         const buttonArea = document.getElementById('button-area');
         const navBox = document.getElementById('nav-box');
+        const bgmPlayer = document.getElementById('bgm-player');
+
+        // BGM 볼륨 설정 (0.0 ~ 1.0) 은은하게 30%로 설정
+        bgmPlayer.volume = 0.3;
 
         document.getElementById('btn-back').addEventListener('click', goBack);
         document.getElementById('btn-restart').addEventListener('click', restart);
@@ -193,6 +202,12 @@
         }
 
         async function handleAnswer(answer) {
+            // ★ 사용자가 첫 번째 버튼을 누르면 BGM 재생 시작
+            if (!isMusicPlaying) {
+                bgmPlayer.play().catch(error => console.log("자동재생 방지됨"));
+                isMusicPlaying = true;
+            }
+
             const answersRef = collection(db, "user_choices");
 
             if (currentIndex === 1) {
@@ -320,6 +335,12 @@
         function restart() {
             contentBox.classList.remove('visible');
             navBox.classList.remove('visible');
+            
+            // 처음으로 돌아갈 때 음악 정지 및 초기화
+            bgmPlayer.pause();
+            bgmPlayer.currentTime = 0;
+            isMusicPlaying = false;
+
             setTimeout(() => {
                 currentIndex = 0;
                 userAnswers = "";
