@@ -30,6 +30,15 @@
             opacity: 1 !important;
         }
 
+        /* 참여자 수 카운트 스타일 */
+        #participant-count {
+            font-size: 14px;
+            color: #777;
+            margin-bottom: 20px;
+            letter-spacing: 1px;
+            display: none; 
+        }
+
         .question-text {
             font-size: 22px;
             margin-bottom: 40px;
@@ -98,6 +107,8 @@
     </audio>
 
     <div id="content-box">
+        <!-- 현재 참여 횟수 표시 영역 추가 -->
+        <div id="participant-count">현재 참여 횟수: 집계 중...</div>
         <div id="text-area" class="question-text"></div>
         <div id="button-area" class="button-box"></div>
     </div>
@@ -136,7 +147,7 @@
             { text: "Q8. 당신은 온전히 '나 자신'만을 위해 하루를 써본 지 얼마나 되었습니까?", options: ["가끔은 어떻게든 나를 위해 조금이라도 시간을 내려고 발버둥 칩니다.", "기억조차 나지 않습니다. 내 시간은 언제나 남을 위해, 혹은 살아남기 위해 써야 했습니다."] },
             { text: "Q9. '책임감'이라는 단어를 떠올렸을 때, 당신의 첫 기분은 어떻습니까?", options: ["쓰러지려는 나를 어떻게든 다시 일으켜 세우는 마지막 원동력입니다.", "내 목을 조르고 숨 막히게 하는, 절대 벗어날 수 없는 무거운 족쇄입니다."] },
             { text: "Q10. 세상에서 가장 가까운 사람에게, 당신의 가장 어둡고 처참한 밑바닥을 솔직하게 털어놓을 수 있습니까?", options: ["네, 나의 못난 모습도 결국 안아주고 이해해 줄 것이라 믿습니다.", "아니오, 말해봤자 소용없거나 그 사람에게 또 다른 짐만 얹어줄 뿐입니다."] },
-            { text: "Q11. 누군가를 부양하거나 책임져야 한다는 압박감에 모든 것을 버리고 도망치고 싶었던 적이 있습니까?", options: ["가끔 숨이 턱 막히도록 버겁지만, 결국 내가 평생 감당해야 할 몫이라 생각합니다.", "네, 모든 것을 다 버려두고 아무도 모르는 곳으로 흔적 없이 사라지고 싶었던 적이 있습니다."] },
+            { text: "Q11. 누군가를 부양하거나 책임져야 한다는 압박감에 모든 것을 버리고 도망치고 싶었던 적이 있습니까?", options: ["가끔 숨이 턱 막히도록 버겁지만, 결국 내가 평생 감당해야 시몫이라 생각합니다.", "네, 모든 것을 다 버려두고 아무도 모르는 곳으로 흔적 없이 사라지고 싶었던 적이 있습니다."] },
             { text: "Q12. 사랑하는 사람(가족, 연인 등)이 곤히 잠든 뒷모습을 볼 때, 당신의 마음을 가장 크게 채우는 감정은 무엇입니까?", options: ["이 험한 세상에서 내가 끝까지 지켜내야 할 나의 유일한 안식처이자 사랑.", "'내가 조금만 더 능력이 있었다면...' 하는 뼈아픈 미안함과 죄책감."] },
             { text: "Q13. 늦은 밤, 일정을 마치고 홀로 남겨진 고요한 시간. 당신을 가장 옥죄는 감정은 무엇입니까?", options: ["당장 내일은 또 어떻게 버텨내야 할지 막막한 '미래의 불안'.", "그때 그런 선택을 하지 말았어야 했다는 돌이킬 수 없는 '과거의 후회'."] },
             { text: "Q14. 지금 당장 당신을 짓누르는 모든 빚과 의무가 기적처럼 사라진다면 당신은 다시 행복해질까요?", options: ["네, 마침내 깊은 숨을 들이마시고 온전히 내 삶을 살 수 있을 것 같습니다.", "아니오, 오히려 그동안 무엇을 위해 살아왔는지 몰라 텅 빈 공허함에 빠질 것 같습니다."] },
@@ -150,27 +161,54 @@
 
         let currentIndex = 0; 
         let userAnswers = ""; 
-        let isMusicPlaying = false; // 음악 재생 상태 확인용
+        let isMusicPlaying = false; 
+        let globalTotalCount = 0;
+        let isCountLoaded = false;
         
         const footerNote = "\n\n저는 상담가가 아닙니다. 그저 질문을 던지는 사람일 뿐입니다.\n당신과 같은 길을 걷고, 같은 아픔을 나눈 사람들이 여기 있다는 사실이\n당신에게 작은 위로가 되기를 바랍니다.";
 
         const contentBox = document.getElementById('content-box');
+        const countBox = document.getElementById('participant-count');
         const textArea = document.getElementById('text-area');
         const buttonArea = document.getElementById('button-area');
         const navBox = document.getElementById('nav-box');
         const bgmPlayer = document.getElementById('bgm-player');
 
-        // BGM 볼륨 설정 (0.0 ~ 1.0) 은은하게 30%로 설정
         bgmPlayer.volume = 0.3;
 
         document.getElementById('btn-back').addEventListener('click', goBack);
         document.getElementById('btn-restart').addEventListener('click', restart);
+
+        // 첫 로드 시 전체 참여자 수 불러오기
+        async function fetchTotalParticipants() {
+            try {
+                const answersRef = collection(db, "user_choices");
+                const snapshot = await getCountFromServer(answersRef);
+                globalTotalCount = snapshot.data().count;
+                isCountLoaded = true;
+            } catch (error) {
+                console.log("카운트 불러오기 실패:", error);
+            }
+        }
+        fetchTotalParticipants();
 
         function showScreen() {
             const currentData = questions[currentIndex];
             textArea.innerText = currentData.text;
             buttonArea.innerHTML = ""; 
             buttonArea.classList.remove('visible'); 
+
+            // 참여 횟수 카운트 표시 제어 (인트로나 결과 창에서는 숨김)
+            if (currentData.type !== "intro" && currentIndex > 0 && currentIndex < questions.length) {
+                countBox.style.display = "block";
+                if (isCountLoaded) {
+                    countBox.innerText = `현재 참여 횟수 : ${globalTotalCount.toLocaleString()}회`;
+                } else {
+                    countBox.innerText = `현재 참여 횟수 : 집계 중...`;
+                }
+            } else {
+                countBox.style.display = "none";
+            }
 
             if (currentIndex > 1 && currentIndex < questions.length) {
                 navBox.classList.add('visible');
@@ -202,7 +240,6 @@
         }
 
         async function handleAnswer(answer) {
-            // ★ 사용자가 첫 번째 버튼을 누르면 BGM 재생 시작
             if (!isMusicPlaying) {
                 bgmPlayer.play().catch(error => console.log("자동재생 방지됨"));
                 isMusicPlaying = true;
@@ -244,6 +281,9 @@
                         const dbNoCount = dbTotalCount - happyCount;
                         const realNo = dbNoCount + 1;
                         const percent = ((realNo / realTotal) * 100).toFixed(1);
+
+                        // 새 답변이 기록되었으므로, 현재 화면의 카운트 최신화
+                        globalTotalCount = realTotal;
 
                         setTimeout(() => {
                             if (realTotal === 1) {
@@ -295,6 +335,7 @@
         function showTransitionText(text) {
             navBox.classList.remove('visible');
             contentBox.classList.remove('visible');
+            countBox.style.display = "none"; // 트랜지션 화면에서 카운트 숨김
             setTimeout(() => {
                 textArea.innerText = text;
                 buttonArea.innerHTML = "";
@@ -306,6 +347,7 @@
         function showResultText(text) {
             navBox.classList.remove('visible');
             contentBox.classList.remove('visible');
+            countBox.style.display = "none"; // 결과 화면에서 카운트 숨김
             setTimeout(() => {
                 textArea.innerText = text;
                 buttonArea.innerHTML = "";
@@ -336,7 +378,6 @@
             contentBox.classList.remove('visible');
             navBox.classList.remove('visible');
             
-            // 처음으로 돌아갈 때 음악 정지 및 초기화
             bgmPlayer.pause();
             bgmPlayer.currentTime = 0;
             isMusicPlaying = false;
